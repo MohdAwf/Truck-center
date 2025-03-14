@@ -26,15 +26,34 @@ class InventoryItem {
   });
 
   factory InventoryItem.fromRecord(RecordModel record) {
+    String? imageUrl;
+    
+    // Check if image field exists and is not empty
+    if (record.data.containsKey('image') && 
+        record.data['image'] != null && 
+        record.data['image'].toString().isNotEmpty) {
+      
+      final imageValue = record.data['image'].toString();
+      
+      // If it's already a full URL
+      if (imageValue.startsWith('http')) {
+        imageUrl = imageValue;
+      } 
+      // If it's just a filename
+      else {
+        imageUrl = 'http://localhost:8090/api/files/${record.collectionId}/${record.id}/$imageValue';
+      }
+    }
+
     return InventoryItem(
       id: record.id,
-      name: record.data['name'],
-      category: record.data['category'],
-      quantity: record.data['quantity'],
-      price: record.data['price'].toDouble(),
+      name: record.data['name'] ?? '',
+      category: record.data['category'] ?? '',
+      quantity: record.data['quantity'] ?? 0,
+      price: (record.data['price'] ?? 0).toDouble(),
       description: record.data['description'],
       location: record.data['location'],
-      imageUrl: record.data['image'],
+      imageUrl: imageUrl,
       createdAt: DateTime.parse(record.created),
       updatedAt: DateTime.parse(record.updated),
     );

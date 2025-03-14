@@ -7,7 +7,6 @@ import '../models/inventory_item.dart';
 import 'dart:convert';
 import 'package:image_picker/image_picker.dart';
 import 'package:http/http.dart' as http;
-import 'package:http_parser/http_parser.dart';
 
 class PocketbaseService extends ChangeNotifier {
   final PocketBase pb = PocketBase('http://localhost:8090/');
@@ -118,117 +117,108 @@ class PocketbaseService extends ChangeNotifier {
 
   Future<String> _uploadCompressedImage(File imageFile) async {
     try {
-      // For web, we need special handling
+      // For web platform
       if (kIsWeb) {
-        // Create a FormData object with required fields
-        final formData = {
-          'name': "Temp Item ${DateTime.now().millisecondsSinceEpoch}",
-          'category': "Temp",
-          'quantity': 1,
-          'price': 1.0,
-          'description': "Temporary item for image upload",
-          'location': "Temp",
-        };
-        
-        // Get the image bytes
+        // Get the bytes from the XFile
         final bytes = await XFile(imageFile.path).readAsBytes();
-        final filename = 'image_${DateTime.now().millisecondsSinceEpoch}.jpg';
         
-        // Create a multipart request manually
-        final uri = Uri.parse('${pb.baseUrl}/api/collections/items/records');
-        final request = http.MultipartRequest('POST', uri);
+        // Create a form data request
+        final request = http.MultipartRequest(
+          'POST',
+          Uri.parse('${pb.baseUrl}/api/collections/items/records'),
+        );
         
-        // Add authorization if user is authenticated
-        if (pb.authStore.isValid) {
-          request.headers['Authorization'] = pb.authStore.token;
-        }
+        // Add required fields
+        request.fields['name'] = "Temp Item ${DateTime.now().millisecondsSinceEpoch}";
+        request.fields['category'] = "Temp";
+        request.fields['quantity'] = "1";
+        request.fields['price'] = "1.0";
+        request.fields['description'] = "Temporary item";
+        request.fields['location'] = "Temp";
         
-        // Add all form fields
-        formData.forEach((key, value) {
-          request.fields[key] = value.toString();
-        });
-        
-        // Add the file with proper content type
+        // Add the file with a simple filename
         request.files.add(
           http.MultipartFile.fromBytes(
             'image',
             bytes,
-            filename: filename,
-            contentType: MediaType('image', 'jpeg'),
+            filename: 'image.jpg',
           ),
         );
         
         // Send the request
-        final streamedResponse = await request.send();
-        final response = await http.Response.fromStream(streamedResponse);
+        final response = await request.send();
+        final responseBody = await http.Response.fromStream(response);
         
         if (response.statusCode == 200 || response.statusCode == 201) {
-          final jsonData = jsonDecode(response.body);
-          final imageUrl = jsonData['image'] ?? '';
+          final jsonData = jsonDecode(responseBody.body);
+          final imageUrl = jsonData['image'];
           
           // Delete the temporary record
           await pb.collection('items').delete(jsonData['id']);
           
-          return imageUrl;
+          return imageUrl ?? '';
         } else {
-          debugPrint('Error response: ${response.body}');
-          throw Exception('Failed to upload image: ${response.statusCode} - ${response.body}');
+          debugPrint('Error response: ${responseBody.body}');
+          return '';
         }
-      } else {
-        // For mobile platforms
-        // Compress the image first
+      } 
+      // For mobile platforms
+      else {
+        // Compress the image
         final tempDir = await getTemporaryDirectory();
-        final targetPath = '${tempDir.path}/compressed_${DateTime.now().millisecondsSinceEpoch}.jpg';
+        final targetPath = '${tempDir.path}/compressed.jpg';
         
         final compressedFile = await FlutterImageCompress.compressAndGetFile(
           imageFile.path,
           targetPath,
           quality: 70,
-          minWidth: 1024,
-          minHeight: 1024,
+          minWidth: 800,
+          minHeight: 800,
         );
         
-        if (compressedFile == null) throw Exception('Failed to compress image');
+        if (compressedFile == null) {
+          throw Exception('Failed to compress image');
+        }
         
-        // Create a temporary record first
-        final record = await pb.collection('items').create(body: {
+        // Create a record with the required fields
+        final formData = {
           'name': "Temp Item ${DateTime.now().millisecondsSinceEpoch}",
           'category': "Temp",
           'quantity': 1,
           'price': 1.0,
-          'description': "Temporary item for image upload",
+          'description': "Temporary item",
           'location': "Temp",
-        });
+        };
         
-        // Now update the record with the image file
-        final formData = FormData();
-        formData.files.add(
-          FormDataFile(
-            'image',
-            await compressedFile.readAsBytes(),
-            filename: 'image_${DateTime.now().millisecondsSinceEpoch}.jpg',
-            contentType: 'image/jpeg',
-          ),
-        );
-        
-        // Update the record with the image
-        final updatedRecord = await pb.collection('items').update(
-          record.id,
-          formData: formData,
+        // Create the record and upload the file
+        final record = await pb.collection('items').create(
+          body: formData,
+          files: [
+            await http.MultipartFile.fromPath(
+              'image',
+              compressedFile.path,
+            ),
+          ],
         );
         
         // Get the image URL
-        final imageUrl = updatedRecord.data['image'] ?? '';
+        final imageUrl = record.data['image'];
         
         // Delete the temporary record
         await pb.collection('items').delete(record.id);
         
-        return imageUrl;
+        return imageUrl ?? '';
       }
     } catch (e) {
-      debugPrint('Error uploading image: $e');
+      debugPrint('Error in _uploadCompressedImage: $e');
       return '';
     }
+  }
+
+  // Helper method to convert image bytes to base64
+  Future<String> _imageToBase64(Uint8List bytes) async {
+    final base64Image = base64Encode(bytes);
+    return 'data:image/jpeg;base64,$base64Image';
   }
 
   Future<void> adjustQuantity(String id, int adjustment) async {
@@ -241,5 +231,10 @@ class PocketbaseService extends ChangeNotifier {
     }
     
     await updateItem(id, quantity: newQuantity);
+  }
+
+  String getFileUrl(String collectionId, String recordId, String filename) {
+    if (filename.isEmpty) return '';
+    return '${pb.baseUrl}/api/files/$collectionId/$recordId/$filename';
   }
 } 

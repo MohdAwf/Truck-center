@@ -122,7 +122,10 @@ class _HomeScreenState extends State<HomeScreen> {
                                       child: CircularProgressIndicator(strokeWidth: 2),
                                     ),
                                   ),
-                                  errorWidget: (context, url, error) => const Icon(Icons.error),
+                                  errorWidget: (context, url, error) {
+                                    debugPrint('Image error: $error for URL: $url');
+                                    return const Icon(Icons.broken_image);
+                                  },
                                 ),
                               )
                             : const Icon(Icons.inventory),

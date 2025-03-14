@@ -125,7 +125,7 @@ class _ItemDetailScreenState extends State<ItemDetailScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            if (widget.item.imageUrl != null || _imageFile != null)
+            if (widget.item.imageUrl != null && widget.item.imageUrl!.isNotEmpty)
               Center(
                 child: GestureDetector(
                   onTap: _isEditing ? _pickImage : null,
@@ -140,16 +140,17 @@ class _ItemDetailScreenState extends State<ItemDetailScreen> {
                         ? kIsWeb 
                             ? const Center(child: Text("New image selected"))
                             : Image.file(_imageFile!, fit: BoxFit.cover)
-                        : widget.item.imageUrl!.isNotEmpty
-                            ? CachedNetworkImage(
-                                imageUrl: widget.item.imageUrl!,
-                                fit: BoxFit.cover,
-                                placeholder: (context, url) => const Center(
-                                  child: CircularProgressIndicator(),
-                                ),
-                                errorWidget: (context, url, error) => const Icon(Icons.error),
-                              )
-                            : const Icon(Icons.image_not_supported, size: 50),
+                        : CachedNetworkImage(
+                            imageUrl: widget.item.imageUrl!,
+                            fit: BoxFit.cover,
+                            placeholder: (context, url) => const Center(
+                              child: CircularProgressIndicator(),
+                            ),
+                            errorWidget: (context, url, error) {
+                              debugPrint('Error loading image: $error for URL: $url');
+                              return const Icon(Icons.error);
+                            },
+                          ),
                   ),
                 ),
               )
